@@ -61,7 +61,43 @@ const CAPTURE_URL = null; // e.g. "https://api.provider.com/v1/subscribe"
 // Support/contact route. Single source of truth — swap here to change it
 // everywhere it renders. Keep in sync with phase1/templates.md.
 const CONTACT = "techtecle@gmail.com";
+
+// [HUMAN] Analytics collector endpoint. While this is null the quiz sends
+// NOTHING and stores NOTHING — events are computed and dropped on the floor.
+// No cookies, no localStorage, no third party, so this is safe to ship ahead
+// of the data-handling notice (issue #9). Set it only once that notice is up.
+const ANALYTICS_URL = null; // e.g. "https://collector.example.com/e"
 // ---------------------------------------------------------------------------
+
+// Funnel instrumentation. Deliberately carries no PII: never the email, never
+// free text — only which question, which archetype was chosen, and timing.
+// SESSION is a random per-visit id held in memory only; it dies with the tab
+// and cannot follow anyone across sites or visits.
+const DEBUG = new URLSearchParams(location.search).has("debug");
+const SESSION = Math.random().toString(36).slice(2, 10);
+const trail = [];
+function track(event, props = {}) {
+  const rec = { ms: Math.round(performance.now()), event, ...props };
+  trail.push(rec);
+  if (ANALYTICS_URL) {
+    const body = JSON.stringify({ session: SESSION, ...rec });
+    try { navigator.sendBeacon(ANALYTICS_URL, new Blob([body], { type: "application/json" })); }
+    catch (_) { fetch(ANALYTICS_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body, keepalive: true }).catch(() => {}); }
+  }
+  if (DEBUG) renderTrail();
+}
+// ?debug=1 renders the event trail on the page, so a run can be read end to
+// end without opening devtools. Off by default; costs nothing when off.
+function renderTrail() {
+  let el = document.getElementById("trail");
+  if (!el) {
+    el = document.createElement("div"); el.id = "trail"; el.className = "card";
+    document.querySelector("main").appendChild(el);
+  }
+  el.innerHTML = `<div class="qnum">Event trail — debug (session ${SESSION}, not sent anywhere)</div>` +
+    trail.map(r => `<div class="small" style="margin:3px 0;font-family:ui-monospace,monospace">+${String(r.ms).padStart(6)}ms <b style="color:var(--accent)">${r.event}</b> ` +
+      Object.entries(r).filter(([k]) => k !== "ms" && k !== "event").map(([k, v]) => `${k}=${v}`).join(" ") + `</div>`).join("");
+}
 
 // Archetype key: P=Persuader S=Strategist O=Operator V=Sovereign
 const ARCH = {
@@ -164,7 +200,7 @@ function render(){
   const box=document.getElementById("opts"); box.innerHTML="";
   shuffle(opts.slice()).forEach(([label,arch])=>{
     const b=document.createElement("button"); b.className="opt"; b.textContent=label;
-    b.onclick=()=>{answers.push(arch); idx++;
+    b.onclick=()=>{track("question_answered",{q:idx+1,choice:arch}); answers.push(arch); idx++;
       document.getElementById("prog").style.width=(idx/Q.length*100)+"%";
       idx<Q.length?render():gate();};
     box.appendChild(b);
@@ -179,6 +215,7 @@ function score(){
   return tied;
 }
 function gate(){
+  track("gate_reached");
   document.getElementById("quiz").classList.add("hide");
   document.getElementById("gate").classList.remove("hide");
 }
@@ -196,8 +233,11 @@ function showResult(){
     <div class="share">"${main.share}"</div>
     <p class="small"><button class="btn" onclick="navigator.clipboard.writeText('${main.share.replace(/'/g,"\\'")} — take the Power OS quiz')">Copy share line</button></p>
     <p class="small">Got a situation you want a read on, or something here landed wrong? Email <a href="mailto:${CONTACT}?subject=Power%20Style%3A%20${encodeURIComponent(main.name)}" style="color:var(--accent)">${CONTACT}</a> — a real person reads it.</p>`;
+  const shareBtn=r.querySelector("button.btn");
+  if(shareBtn) shareBtn.addEventListener("click",()=>track("share_copied",{archetype:tied[0]}));
   document.getElementById("gate").classList.add("hide");
   r.classList.remove("hide");
+  track("result_shown",{archetype:tied[0],hybrid:tied.length>1});
 }
 document.getElementById("capture").onsubmit=async e=>{
   e.preventDefault();
@@ -206,9 +246,11 @@ document.getElementById("capture").onsubmit=async e=>{
     try{await fetch(CAPTURE_URL,{method:"POST",headers:{"Content-Type":"application/json"},
       body:JSON.stringify({email,archetype:tied[0],scores:answers.join("")})});}catch(_){/* non-blocking */}
   }else{console.log("CAPTURE_STUB",{email,archetype:tied[0]});}
+  track("capture_submitted",{archetype:tied[0],wired:!!CAPTURE_URL}); // never the address itself
   showResult();
 };
-document.getElementById("skip").onclick=e=>{e.preventDefault();showResult();};
+document.getElementById("skip").onclick=e=>{e.preventDefault();track("capture_skipped");showResult();};
+track("quiz_start",{questions:Q.length});
 render();
 </script>
 </body>
