@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>What's Your Power Style?</title>
+<style>
+  :root{--bg:#0f1115;--card:#1a1d24;--ink:#e8e6e1;--dim:#9a9790;--accent:#d4a24e;--line:#2a2e38}
+  *{box-sizing:border-box;margin:0}
+  body{background:var(--bg);color:var(--ink);font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;min-height:100vh;display:flex;justify-content:center;padding:32px 16px}
+  main{width:100%;max-width:640px}
+  h1{font-size:1.7em;line-height:1.2;margin-bottom:8px}
+  .dim{color:var(--dim)}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:24px;margin-top:20px}
+  .qnum{color:var(--accent);font-size:.85em;letter-spacing:.08em;text-transform:uppercase}
+  .qtext{font-size:1.15em;font-weight:600;margin:8px 0 16px}
+  button.opt{display:block;width:100%;text-align:left;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin:8px 0;font:inherit;cursor:pointer;transition:border-color .15s}
+  button.opt:hover{border-color:var(--accent)}
+  .bar{height:4px;background:var(--line);border-radius:2px;margin-top:16px;overflow:hidden}
+  .bar i{display:block;height:100%;background:var(--accent);transition:width .25s}
+  .btn{background:var(--accent);color:#14100a;border:0;border-radius:8px;padding:12px 22px;font:inherit;font-weight:700;cursor:pointer}
+  input[type=email]{width:100%;padding:12px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font:inherit;margin:12px 0}
+  .emoji{font-size:2.2em}
+  .tag{font-style:italic;color:var(--accent)}
+  .sect{margin-top:14px}
+  .sect b{color:var(--accent)}
+  .share{background:var(--bg);border:1px dashed var(--line);border-radius:8px;padding:12px;margin-top:14px;font-style:italic}
+  .small{font-size:.85em;color:var(--dim);margin-top:10px}
+  .hide{display:none}
+</style>
+</head>
+<body>
+<main>
+  <h1>What's Your Power Style?</h1>
+  <p class="dim">Everyone has a default way they win — through people, positioning, execution, or leverage. 12 questions, 2 minutes. Find yours (and its shadow).</p>
+
+  <div class="card" id="quiz">
+    <div class="qnum" id="qnum"></div>
+    <div class="qtext" id="qtext"></div>
+    <div id="opts"></div>
+    <div class="bar"><i id="prog" style="width:0%"></i></div>
+  </div>
+
+  <div class="card hide" id="gate">
+    <div class="qtext">Your result is ready.</div>
+    <p class="dim">Where should we send your full Power Style profile — including your blind spot and this week's drill?</p>
+    <form id="capture">
+      <input type="email" id="email" placeholder="you@work.com" required>
+      <button class="btn" type="submit">Show my Power Style →</button>
+    </form>
+    <p class="small"><a href="#" id="skip" style="color:var(--dim)">Skip — just show the result</a></p>
+  </div>
+
+  <div class="card hide" id="result"></div>
+</main>
+
+<script>
+// ---- CONFIG ---------------------------------------------------------------
+// [HUMAN] Replace with the real provider endpoint when chosen (Beehiiv/Kit/etc).
+const CAPTURE_URL = null; // e.g. "https://api.provider.com/v1/subscribe"
+// Support/contact route. Single source of truth — swap here to change it
+// everywhere it renders. Keep in sync with phase1/templates.md.
+const CONTACT = "techtecle@gmail.com";
+// ---------------------------------------------------------------------------
+
+// Archetype key: P=Persuader S=Strategist O=Operator V=Sovereign
+const ARCH = {
+  P:{name:"The Persuader",emoji:"🗣",tag:"you win through people",
+     body:"Rooms change when you read them. You sense what people need to hear, build trust fast, and turn skeptics into allies — influence for you is a conversation, not a memo. Persuaders close deals, defuse conflicts, and get discretionary effort out of teams that would stall for anyone else.",
+     blind:"You over-rely on the room. When decisions move to paper, data, or venues you're not in, your advantage evaporates — and because people rarely fight you face-to-face, you can mistake pleasant agreement for real commitment.",
+     read:"Never Split the Difference — it will weaponize what you already do instinctively.",
+     drill:"After your next important conversation, write down what was actually agreed and send it. Watch how often the written version surprises people.",
+     share:"I'm a Persuader — I win in rooms you didn't know were negotiations."},
+  S:{name:"The Strategist",emoji:"♟",tag:"you win through positioning",
+     body:"You see the board. While others react to this week, you're tracking incentives, alliances, and where things land in two quarters. You rarely fight battles you haven't already won on setup, and people are often surprised to find you exactly where the opportunity opened up — as if by luck. It wasn't.",
+     blind:"Waiting. Perfect positioning with no strike becomes spectating, and your comfort operating quietly means the org may not know what you're worth — invisibility is a tax you're paying voluntarily.",
+     read:"The 33 Strategies of War — structure for what you do by instinct.",
+     drill:"Pick one plan you've been maturing and take one irreversible visible step on it. Small is fine. Irreversible is the point.",
+     share:"I'm a Strategist — by the time you noticed, it was already decided."},
+  O:{name:"The Operator",emoji:"🔧",tag:"you win through execution",
+     body:"You ship. While others narrate, you build the prototype, close the loop, and make the dashboard nobody can argue with. Your credibility is the deepest kind — earned, demonstrated, compounding — and in any crisis, people quietly route around the org chart to get to you.",
+     blind:"You assume the work speaks for itself. It doesn't; someone speaks for it, and if it isn't you, it's whoever presented it. You under-invest in visibility and alliances, then feel blindsided when lesser work wins the room.",
+     read:"The 48 Laws of Power — not to play the game, to stop losing to it.",
+     drill:"Before your next deliverable, send a two-line preview to one person above your usual audience. Authorship, established early, in writing.",
+     share:"I'm an Operator — while you were positioning, I shipped."},
+  V:{name:"The Sovereign",emoji:"👑",tag:"you win through independence",
+     body:"You don't ask permission. Your power comes from options — skills, assets, and a walk-away point you actually mean. People negotiate differently with someone who visibly doesn't need them, and your calm in high-pressure rooms comes from a simple place: you've already priced the worst case.",
+     blind:"Independence can curdle into isolation. You leave leverage on the table by refusing to build coalitions, and your detachment reads as disdain to people who could have been allies. Some games are worth playing even when you don't have to.",
+     read:"Meditations — the source code of your temperament, and its warning label.",
+     drill:"Ask one person for help with something you could do alone. Notice the resistance; that resistance is the ceiling on your reach.",
+     share:"I'm a Sovereign — my leverage is that I'll leave."}
+};
+
+// Each option carries its archetype; order is shuffled per question at runtime.
+const Q = [
+ ["A senior exec you've never met joins your all-hands call early. Two minutes of dead air. You:",
+  [["Introduce yourself and ask what they're most curious about today","P"],
+   ["Say a polite hello and use the time to reread your notes on their priorities","S"],
+   ["Pull up the dashboard so it's ready the second the meeting starts","O"],
+   ["Let the silence sit — you don't perform for whoever walks in","V"]]],
+ ["Your project got cut in a budget review you weren't invited to. First move:",
+  [["Coffee with the two people who were in the room, to hear the mood behind the decision","P"],
+   ["Figure out whose goals the surviving projects serve, and where yours could attach","S"],
+   ["Ship the almost-done piece anyway so the value is undeniable","O"],
+   ["Update your resume and your side project — you never rely on one bet","V"]]],
+ ["A recruiter asks your salary expectations on the first call. You:",
+  [["Turn it around warmly: \"What's the band you've got approved?\"","P"],
+   ["Deflect until you know who else they're talking to and how long the role's been open","S"],
+   ["Give a researched number with the receipts for why","O"],
+   ["Name a high number flatly — if it ends the call, it saved you time","V"]]],
+ ["Your best idea gets lukewarm nods in the meeting. You:",
+  [["Find the most skeptical person after and ask what they'd need to see","P"],
+   ["Drop it for now and reintroduce it through the person whose goals it serves","S"],
+   ["Build a small prototype over the weekend and demo it next week","O"],
+   ["Log it, move on — good ideas find their moment or they weren't that good","V"]]],
+ ["A teammate quietly warns you: \"Heads up, Jordan's been criticizing your work to the director.\" You:",
+  [["Invite Jordan to collaborate on something small — closeness beats distance here","P"],
+   ["Say thanks, reveal nothing, and start noting what Jordan says and to whom","S"],
+   ["Make your next deliverable so airtight the criticism has nothing to grip","O"],
+   ["Shrug — the director can judge the work, and you're not auditioning for Jordan","V"]]],
+ ["You're given two direct reports and a deadline that needs weekends. You:",
+  [["Sell the mission first — people give discretionary effort to people, not plans","P"],
+   ["Renegotiate the deadline scope before touching your team's weekends","S"],
+   ["Break the work down yourself first so every hour asked is an hour needed","O"],
+   ["Tell leadership plainly what the deadline costs and let them own the choice","V"]]],
+ ["At a conference dinner, you're seated next to the person you most want to work with. You:",
+  [["Get them talking about their hardest current problem and really listen","P"],
+   ["Mention the one mutual connection and one insight you prepared for exactly this","S"],
+   ["Keep it light — your work is findable, and dinner charm is cheap currency","O"],
+   ["Enjoy the meal; if the fit is real it won't depend on one dinner","V"]]],
+ ["Your manager takes a half-formed version of your idea to their boss. It lands well. You:",
+  [["Congratulate them sincerely, then ask to co-present the follow-up","P"],
+   ["Say nothing yet — a well-timed \"happy to share the full methodology\" is coming","S"],
+   ["Send the complete version to your manager \"for the next conversation,\" dated","O"],
+   ["Note it, and quietly stop sharing half-formed things with them","V"]]],
+ ["A client demands a discount \"or we walk.\" You believe they're bluffing. You:",
+  [["Label it: \"Sounds like budget pressure landed on you this quarter — what happened?\"","P"],
+   ["Ask for a week \"to see what's possible\" and use it to check how movable they really are","S"],
+   ["Re-send the results dashboard and offer to cut scope instead of price","O"],
+   ["Hold the price and tell them you'll part as friends if it doesn't work","V"]]],
+ ["You have 3 free hours a week to invest in your career. You spend them on:",
+  [["Coffees and calls — your network is the career","P"],
+   ["Studying where your industry is going and positioning for it","S"],
+   ["A skill certification or shipping something visible","O"],
+   ["Building income or assets outside your employer entirely","V"]]],
+ ["In a heated meeting, someone twists your words in front of everyone. You:",
+  [["Stay warm and curious: \"Help me understand how you got there from what I said\"","P"],
+   ["Correct it once, briefly, and clock who in the room nodded along","S"],
+   ["Restate exactly what you said, pull up the doc, and move on","O"],
+   ["Let it hang — scrambling to defend yourself is what they wanted","V"]]],
+ ["The honest reason you want more power at work:",
+  [["To bring people along — nothing big gets done alone","P"],
+   ["To stop being at the mercy of decisions made two levels above you","S"],
+   ["To get real resources for the things you know how to build","O"],
+   ["To need nobody's permission","V"]]]
+];
+
+let idx=0, answers=[];
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+function render(){
+  const [text,opts]=Q[idx];
+  document.getElementById("qnum").textContent=`Question ${idx+1} of ${Q.length}`;
+  document.getElementById("qtext").textContent=text;
+  const box=document.getElementById("opts"); box.innerHTML="";
+  shuffle(opts.slice()).forEach(([label,arch])=>{
+    const b=document.createElement("button"); b.className="opt"; b.textContent=label;
+    b.onclick=()=>{answers.push(arch); idx++;
+      document.getElementById("prog").style.width=(idx/Q.length*100)+"%";
+      idx<Q.length?render():gate();};
+    box.appendChild(b);
+  });
+}
+function score(){
+  const c={P:0,S:0,O:0,V:0}; answers.forEach(a=>c[a]++);
+  const max=Math.max(...Object.values(c));
+  let tied=Object.keys(c).filter(k=>c[k]===max);
+  const q12=answers[11];
+  if(tied.length>1&&tied.includes(q12)) tied=[q12,...tied.filter(k=>k!==q12)];
+  return tied;
+}
+function gate(){
+  document.getElementById("quiz").classList.add("hide");
+  document.getElementById("gate").classList.remove("hide");
+}
+function showResult(){
+  const tied=score(), main=ARCH[tied[0]];
+  const title=tied.length>1?tied.map(k=>ARCH[k].name.replace("The ","")).join("-"):main.name;
+  const r=document.getElementById("result");
+  r.innerHTML=`<div class="emoji">${main.emoji}</div>
+    <div class="qtext">${title} <span class="tag">— ${main.tag}</span></div>
+    ${tied.length>1?`<p class="dim">A hybrid — your Q12 answer breaks the tie toward ${main.name}.</p>`:""}
+    <p class="sect">${main.body}</p>
+    <p class="sect"><b>Your blind spot:</b> ${main.blind}</p>
+    <p class="sect"><b>Read first:</b> ${main.read}</p>
+    <p class="sect"><b>Drill this week:</b> ${main.drill}</p>
+    <div class="share">"${main.share}"</div>
+    <p class="small"><button class="btn" onclick="navigator.clipboard.writeText('${main.share.replace(/'/g,"\\'")} — take the Power OS quiz')">Copy share line</button></p>
+    <p class="small">Got a situation you want a read on, or something here landed wrong? Email <a href="mailto:${CONTACT}?subject=Power%20Style%3A%20${encodeURIComponent(main.name)}" style="color:var(--accent)">${CONTACT}</a> — a real person reads it.</p>`;
+  document.getElementById("gate").classList.add("hide");
+  r.classList.remove("hide");
+}
+document.getElementById("capture").onsubmit=async e=>{
+  e.preventDefault();
+  const email=document.getElementById("email").value, tied=score();
+  if(CAPTURE_URL){
+    try{await fetch(CAPTURE_URL,{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({email,archetype:tied[0],scores:answers.join("")})});}catch(_){/* non-blocking */}
+  }else{console.log("CAPTURE_STUB",{email,archetype:tied[0]});}
+  showResult();
+};
+document.getElementById("skip").onclick=e=>{e.preventDefault();showResult();};
+render();
+</script>
+</body>
+</html>
