@@ -1,1 +1,5 @@
 .vscode/
+# hygiene (readiness-1127)
+.DS_Store
+.env
+.env.*
